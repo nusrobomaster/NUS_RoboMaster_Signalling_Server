@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "dsjslib": "^0.6.14",
     "ws": "^7.3.1"
   }
 }
