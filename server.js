@@ -94,14 +94,12 @@ wss.on('connection', function(connection) {
       
       if (connection.otherName) { 
          console.log("Disconnecting from ", connection.otherName);
-         var conn = connectedUsers[connection.otherName]; 
-         conn.otherName = null;  
          
-         if (conn != null) { 
+         /*if (conn != null) { 
             sendToConnection(conn, { 
                type: "leave" 
             });
-         }  
+         } */ 
       } 
    });  
 });  
