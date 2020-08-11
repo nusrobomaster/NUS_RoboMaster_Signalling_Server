@@ -56,7 +56,7 @@ wss.on('connection', function(connection) {
             break;  
 				
          case "leave": 
-            console.log("Disconnecting from", data.name); 
+            console.log("THIS WILL NEVER BE USED", data.name); 
             var conn = connectedUsers[data.name]; 
             conn.otherName = null; 
 				
@@ -66,7 +66,6 @@ wss.on('connection', function(connection) {
                   type: "leave" 
                }); 
             }  
-				
             break;  
 				
          default: 
@@ -81,25 +80,39 @@ wss.on('connection', function(connection) {
    
    // Handle user/robot leaving
    connection.on("close", function() { 
+      var targetPeerConnection = null;
+
       if (connectedUsers[connection.name]) {
          console.log("User left: " + connection.name + ", " + connection._socket.remoteAddress);
          delete connectedUsers[connection.name];
          console.log("Total connected users: ", Object.keys(connectedUsers).length);
 
+         if (connection.connectedPeer) {
+            targetPeerConnection = connectedRobots[connection.connectedPeer];
+         }
+
       } else if (connectedRobots[connection.name]) {
          console.log("Robot left: " + connection.name + ", " + connection._socket.remoteAddress);
          delete connectedRobots[connection.name];
          console.log("Total connected robots: ", Object.keys(connectedRobots).length);
+      
+         if (connection.connectedPeer) {
+            targetPeerConnection = connectedUsers[connection.connectedPeer];
+         }
+
+      } else {
+         console.log("Unknown user has left");
+         console.log("Total connected users: ", Object.keys(connectedUsers).length);
+         console.log("Total connected robots: ", Object.keys(connectedRobots).length);
       }
       
-      if (connection.otherName) { 
-         console.log("Disconnecting from ", connection.otherName);
-         
-         /*if (conn != null) { 
-            sendToConnection(conn, { 
-               type: "leave" 
-            });
-         } */ 
+      // Need to send signal to close peer connection on connected peer if it exists
+      if (targetPeerConnection) { 
+         console.log(connection.name + " disconnecting from ", targetPeerConnection.name);
+         sendToConnection(targetPeerConnection, { 
+            type: "leave",
+            name: connection.name
+         });
       } 
    });  
 });  
@@ -118,8 +131,7 @@ function robotLoginHandler(data, connection) {
       connection.name = data.name;
       connection.joinedGame = data.joinedGame;
       connectedRobots[data.name] = connection;
-      
-
+   
       console.log("Robot successfully logged in: " + data.name);
 
       sendToConnection(connection, { 
@@ -127,7 +139,6 @@ function robotLoginHandler(data, connection) {
          success: true 
       }); 
    }
-
    console.log("Total connected robots: ", Object.keys(connectedRobots).length);
 }
 
@@ -177,7 +188,7 @@ function joinQueue(data, connection) {
 
 
 function findRobotHandler(data, connection) {
-   console.log(connection.name + " attempting to find robot for " + data.joinedGame);
+   console.log(connection.name + " attempting to find robot for game: " + data.joinedGame);
    var robot = null;
    for (var connectedRobot of Object.values(connectedRobots)) {
       if (connectedRobot.joinedGame === data.joinedGame) {
@@ -189,7 +200,8 @@ function findRobotHandler(data, connection) {
 
    if (!robot) {
       // No robots are available, put user in queue.
-      joinQueue(data, connection);
+      console.log("No robots available, user joining queue for game: " + data.joinedGame);
+      //joinQueue(data, connection);
    } else {
       // Request for offer from client.
       sendToConnection(connection, {
@@ -201,32 +213,47 @@ function findRobotHandler(data, connection) {
 
 
 function offerHandler(data, connection) {
-   console.log(connection.name + " sending offer to robot: " + data.name);
-   sendToConnection(connectedRobots[data.name], {
-      type: "offer",
-      offer: data.offer,
-      name: connection.name
-   });
+   var targetRobotConnection = connectedRobots[data.name];
+
+   if (targetRobotConnection != null) {
+      console.log(connection.name + " sending offer to robot: " + data.name);
+
+      // Storing robot name that user is connected to
+      connection.connectedPeer = data.name;
+      sendToConnection(connectedRobots[data.name], {
+         type: "offer",
+         offer: data.offer,
+         name: connection.name
+      });
+   
+   } else {
+      console.log("Robot " + data.name + " is no longer connected to server.");
+   }
 }
 
 
 function answerHandler(data, connection) {
-   console.log("Sending answer from " + connection.name + " to " + data.name); 
 
-   var targetConnection = connectedUsers[data.name]; 
+   var targetUserConnection = connectedUsers[data.name]; 
    
-   if(targetConnection != null) { 
-      connection.otherName = data.name; 
-      sendToConnection(targetConnection, { 
+   if (targetUserConnection != null) { 
+      console.log("Sending answer from " + connection.name + " to " + data.name); 
+
+      // Storing user name that robot is connected to
+      connection.connectedPeer = data.name; 
+      sendToConnection(targetUserConnection, { 
          type: "answer", 
          answer: data.answer 
       }); 
-   } 
+
+   } else {
+      console.log("User " + data.name + " is no longer conected to server.");
+   }
 }
 
 
 wss.on("close", function(connection) {
-    console.log("no way");
+    console.log("Something terribly wrong has happened. Help.");
 });
 
 
