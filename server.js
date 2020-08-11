@@ -56,65 +56,22 @@ wss.on('connection', function(connection) {
             break;  
 				
          case "leave": 
-            console.log("THIS WILL NEVER BE USED", data.name); 
-            var conn = connectedUsers[data.name]; 
-            conn.otherName = null; 
-				
-            //notify the other user so he can disconnect his peer connection 
-            if(conn != null) { 
-               sendToConnection(conn, { 
-                  type: "leave" 
-               }); 
-            }  
-            break;  
+            leaveHandler(data, connection);   
+            break;
 				
          default: 
             sendToConnection(connection, { 
                type: "error", 
                message: "Command not found: " + data.type 
             }); 
-				
             break; 
       }  
    });  
    
    // Handle user/robot leaving
-   connection.on("close", function() { 
-      var targetPeerConnection = null;
-
-      if (connectedUsers[connection.name]) {
-         console.log("User left: " + connection.name + ", " + connection._socket.remoteAddress);
-         delete connectedUsers[connection.name];
-         console.log("Total connected users: ", Object.keys(connectedUsers).length);
-
-         if (connection.connectedPeer) {
-            targetPeerConnection = connectedRobots[connection.connectedPeer];
-         }
-
-      } else if (connectedRobots[connection.name]) {
-         console.log("Robot left: " + connection.name + ", " + connection._socket.remoteAddress);
-         delete connectedRobots[connection.name];
-         console.log("Total connected robots: ", Object.keys(connectedRobots).length);
-      
-         if (connection.connectedPeer) {
-            targetPeerConnection = connectedUsers[connection.connectedPeer];
-         }
-
-      } else {
-         console.log("Unknown user has left");
-         console.log("Total connected users: ", Object.keys(connectedUsers).length);
-         console.log("Total connected robots: ", Object.keys(connectedRobots).length);
-      }
-      
-      // Need to send signal to close peer connection on connected peer if it exists
-      if (targetPeerConnection) { 
-         console.log(connection.name + " disconnecting from ", targetPeerConnection.name);
-         sendToConnection(targetPeerConnection, { 
-            type: "leave",
-            name: connection.name
-         });
-      } 
-   });  
+   connection.on("close", function() {
+      leaveHandler({}, connection); 
+   });
 });  
 
 
@@ -251,6 +208,47 @@ function answerHandler(data, connection) {
    }
 }
 
+
+function leaveHandler(data, connection) {
+   var targetPeerConnection = null;
+
+   if (connectedUsers[connection.name]) {
+      console.log("User left: " + connection.name + ", " + connection._socket.remoteAddress);
+      
+      if (!data.leaveType) {
+         delete connectedUsers[connection.name];
+      }
+      
+      console.log("Total connected users: ", Object.keys(connectedUsers).length);
+
+      if (connection.connectedPeer) {
+         targetPeerConnection = connectedRobots[connection.connectedPeer];
+      }
+
+   } else if (connectedRobots[connection.name]) {
+      console.log("Robot left: " + connection.name + ", " + connection._socket.remoteAddress);
+      delete connectedRobots[connection.name];
+      console.log("Total connected robots: ", Object.keys(connectedRobots).length);
+   
+      if (connection.connectedPeer) {
+         targetPeerConnection = connectedUsers[connection.connectedPeer];
+      }
+
+   } else {
+      console.log("Unknown user @ " + connection._socket.remoteAddress + " has left");
+      console.log("Total connected users: ", Object.keys(connectedUsers).length);
+      console.log("Total connected robots: ", Object.keys(connectedRobots).length);
+   }
+   
+   // Need to send signal to close peer connection on connected peer if it exists
+   if (targetPeerConnection) { 
+      console.log(connection.name + " disconnecting from ", targetPeerConnection.name);
+      sendToConnection(targetPeerConnection, { 
+         type: "leave",
+         name: connection.name
+      });
+   }
+}
 
 wss.on("close", function(connection) {
     console.log("Something terribly wrong has happened. Help.");
