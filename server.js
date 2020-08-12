@@ -3,6 +3,35 @@ var SortedMap = require('dsjslib').AVLTree;
 
 var wss = new WebSocketServer({port: 49621}); 
 
+var stdin = process.openStdin();
+stdin.addListener("data", function(d) {
+    var input = d.toString().trim();
+    
+    switch (input) {
+        case "max":
+            console.log(userBattleQueue.max());
+            break;
+
+        case "min":
+            console.log(userBattleQueue.min());
+            break;
+        
+        case "print":
+            userBattleQueue.traverse(function(node) {
+               console.log(node.key, node.value);     
+            });
+            break;
+        
+        case "info":
+            console.log(userBattleQueue);
+            break;
+
+        default:
+            console.log("Unknown input");
+            break;
+    }
+});
+
 
 /* Data structures */
 var connectedUsers = {}; // Stores all users connected to server
@@ -126,17 +155,23 @@ function userLoginHandler(data, connection) {
 
 function joinQueue(data, connection) {
    connection.timestamp = Date.now();
+   queueArray = [];
 
    if (data.joinedGame === "battle") {
       connection.joinedGame = "battle";
       userBattleQueue.put(connection.name, connection.timestamp);
+      userBattleQueue.traverse(function(node) {
+        
+      });
+
    } else { // data.joinedGame === "shooting"
       connection.joinedGame = "shooting";
       userShootingQueue.put(connection.name, connection.timestamp);
    }
 
+
    sendToConnection(connection, {
-      type: "put-in-queue"
+      type: "update-queue"
    });
    sendToConnection(connection, {
       type: "update-queue"
@@ -158,7 +193,7 @@ function findRobotHandler(data, connection) {
    if (!robot) {
       // No robots are available, put user in queue.
       console.log("No robots available, user joining queue for game: " + data.joinedGame);
-      //joinQueue(data, connection);
+      joinQueue(data, connection);
    } else {
       // Request for offer from client.
       sendToConnection(connection, {
