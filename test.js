@@ -1,3 +1,6 @@
+console.warn("test warning");
+console.error("test error");
+
 var collections = require('dsjslib');
 
 var myMap = {};
