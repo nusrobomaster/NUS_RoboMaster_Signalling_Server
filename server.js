@@ -121,8 +121,8 @@ wss.on('connection', function(connection) {
    
    // Handle user/robot leaving
    connection.on("close", function() {
-      console.log(connection.name + " closed browser.");
-      leaveHandler({}, connection); 
+      console.log(connection.name + ", " + connection._socket.remoteAddress + " closed browser.");
+      leaveHandler({leaveType: "hard-exit"}, connection); 
    });
 });  
 
@@ -300,12 +300,15 @@ function userStartGameHandler(data, connection) {
    }
 
    // Delete user from appropriate game queue since they have started the game
+   // This is assuming the user has been waiting in the queue previously.
    if (gameQueue.get(connection.name) != null) {
       gameQueue.delete(connection.name);
-   } else {
+   } 
+   // If the user is literally the first person to join the queue, they will not be in the queue.
+   // So the error below will be normal.
+   else {
       console.error("User " + connection.name + " no longer has a place in " +
             connection.joinedGame + " queue!")
-      return;
    }
 
    // Send queue update to all users NOW, since a user is confirmed to have started a game.
@@ -343,7 +346,8 @@ function leaveHandler(data, connection) {
 
 
 function userLeaveHandler(data, connection) {
-   console.log("User left: " + connection.name + " @ IP: " + connection._socket.remoteAddress);
+   console.log("User left: " + connection.name + " @ IP: " + 
+         connection._socket.remoteAddress + ". Leave type: " + data.leaveType);
    
    var isLeavingUserController = false;
    var gameQueue = null;
@@ -404,7 +408,8 @@ function userLeaveHandler(data, connection) {
    }
 
    // Delete leaving user connection object if it is a hard leave
-   if (data.leaveType !== "browser-back" || data.leaveType === "kicked") {
+   if (data.leaveType === "hard-exit" || data.leaveType === "kicked") {
+      console.log("Hard exit, deleting user: " + connection.name);
       delete connectedUsers[connection.name];
    }
    console.log("Total connected users: ", Object.keys(connectedUsers).length);
@@ -436,6 +441,8 @@ function userLeaveHandlerHelper(connection, gameQueue, isLeavingUserController) 
                console.error("Could not find a comparison for gameQueue!");
             }
          }
+      } else {
+         console.log("No users in queue.");
       }
    }
 }
