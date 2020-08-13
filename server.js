@@ -177,6 +177,37 @@ function userLoginHandler(data, connection) {
 }
 
 
+function findRobotHandler(data, connection) {
+   connection.joinedGame = data.joinedGame;
+   console.log(connection.name + " attempting to find robot for game: " + connection.joinedGame);
+   
+   // Find if there are any available robots matching user's game request.
+   var robot = null;
+   for (var connectedRobot of Object.values(connectedRobots)) {
+      // Need to ensure that the robot is not currently connected to a user.
+      console.log("Robot " + connectedRobot.name + " in game: " + connectedRobot.joinedGame + 
+            " | Availability: " + connectedRobot.connectedPeer);
+      if (connectedRobot.connectedPeer == null && connectedRobot.joinedGame === connection.joinedGame) {
+         console.log("Robot found: " + connectedRobot.name);
+         robot = connectedRobot;
+         break;
+      }
+   }
+
+   if (!robot) {
+      // No robots are available, put user in queue.
+      console.log("No robots available, " + connection.name + " joining queue for game: " + connection.joinedGame);
+      joinQueue(data, connection);
+   } else {
+      // Robot was found, so now we begin the signalling process between user and robot.
+      sendToConnection(connection, {
+         type: "request-offer",
+         robotName: robot.name
+      });
+   }
+}
+
+
 function joinQueue(data, connection) {
    // If this function is called, user should already have a joinedGame
    // attribute assigned.
@@ -208,37 +239,6 @@ function joinQueue(data, connection) {
          instruction: "normal-update",
          game: val.joinedGame,
          updatedQueue: queueArray
-      });
-   }
-}
-
-
-function findRobotHandler(data, connection) {
-   connection.joinedGame = data.joinedGame;
-   console.log(connection.name + " attempting to find robot for game: " + connection.joinedGame);
-   
-   // Find if there are any available robots matching user's game request.
-   var robot = null;
-   for (var connectedRobot of Object.values(connectedRobots)) {
-      // Need to ensure that the robot is not currently connected to a user.
-      console.log("Robot " + connectedRobot.name + " in game: " + connectedRobot.joinedGame + 
-            " | Availability: " + connectedRobot.connectedPeer);
-      if (connectedRobot.connectedPeer == null && connectedRobot.joinedGame === connection.joinedGame) {
-         console.log("Robot found: " + connectedRobot.name);
-         robot = connectedRobot;
-         break;
-      }
-   }
-
-   if (!robot) {
-      // No robots are available, put user in queue.
-      console.log("No robots available, " + connection.name + " joining queue for game: " + connection.joinedGame);
-      joinQueue(data, connection);
-   } else {
-      // Robot was found, so now we begin the signalling process between user and robot.
-      sendToConnection(connection, {
-         type: "request-offer",
-         robotName: robot.name
       });
    }
 }
@@ -361,6 +361,7 @@ function userLeaveHandler(data, connection) {
             name: connection.name
          });
       }
+      connection.connectedPeer = null; // Deregister robot for this user.
 
       // If we are inside this block, the user who left was currently the one controlling the robot
       // Only in this case do we try to find the next user who should control the robot.
@@ -413,6 +414,7 @@ function userLeaveHandler(data, connection) {
 function userLeaveHandlerHelper(connection, gameQueue, isLeavingUserController) {
    // If user exists in queue, delete the user from the queue.
    if (gameQueue.get(connection.name) != null) {
+      console.log(connection.name + " deleted from queue " + connection.joinedGame);
       gameQueue.delete(connection.name);
    }
    
