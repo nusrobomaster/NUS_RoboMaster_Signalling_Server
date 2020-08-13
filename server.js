@@ -383,7 +383,7 @@ function userLeaveHandler(data, connection) {
       }
    }
    
-   if (isLeavingUserController === false) {
+   if (isLeavingUserController === false && gameQueue != null) {
       // Since the user who left is someone who is in the middle of the queue, we simply need
       // to remove the user (as we have done already by this point), and send the updated queue
       // to all users.
