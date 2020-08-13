@@ -5,31 +5,39 @@ var wss = new WebSocketServer({port: 49621});
 
 var stdin = process.openStdin();
 stdin.addListener("data", function(d) {
-    var input = d.toString().trim();
+   var input = d.toString().trim().split(/(?<=^\S+)\s/);
     
-    switch (input) {
-        case "max":
-            console.log(userBattleQueue.max());
-            break;
+   switch (input[0]) {
+      case "max":
+         console.log(userBattleQueue.max());
+         break;
 
-        case "min":
-            console.log(userBattleQueue.min());
-            break;
-        
-        case "print":
-            userBattleQueue.traverse(function(node) {
-               console.log(node.key, node.value);     
-            });
-            break;
-        
-        case "info":
-            console.log(userBattleQueue);
-            break;
+      case "min":
+         console.log(userBattleQueue.min());
+         break;
 
-        default:
-            console.log("Unknown input");
-            break;
-    }
+      case "print":
+         userBattleQueue.traverse(function(node) {
+            console.log(node.key, node.value);     
+         });
+         break;
+
+      case "info":
+         console.log(userBattleQueue);
+         break;
+
+      case "kick":
+         if (connectedUsers[input[1]]) {
+            leaveHandler({leaveType: "kicked"}, connectedUsers[input[1]]);
+         } else {
+            console.log("No such user found.");
+         }
+         break;
+
+      default:
+         console.log("Unknown input");
+         break;
+      }
 });
 
 
@@ -99,6 +107,7 @@ wss.on('connection', function(connection) {
    
    // Handle user/robot leaving
    connection.on("close", function() {
+      console.log(connection.name + " closed browser.");
       leaveHandler({}, connection); 
    });
 });  
@@ -158,32 +167,38 @@ function joinQueue(data, connection) {
    queueArray = [];
 
    if (data.joinedGame === "battle") {
-      connection.joinedGame = "battle";
       userBattleQueue.put(connection.name, connection.timestamp);
       userBattleQueue.traverse(function(node) {
-        
+         queueArray.push(node.key);
       });
 
    } else { // data.joinedGame === "shooting"
-      connection.joinedGame = "shooting";
       userShootingQueue.put(connection.name, connection.timestamp);
+      userShootingQueue.traverse(function(node) {
+         queueArray.push(node.key);
+      });
    }
 
-
-   sendToConnection(connection, {
-      type: "update-queue"
-   });
-   sendToConnection(connection, {
-      type: "update-queue"
-   })
+   //console.log(Object.values(connectedUsers));
+   for (var val of Object.values(connectedUsers)) {
+      sendToConnection(val, {
+         type: "update-queue",
+         game: val.joinedGame,
+         updatedQueue: queueArray
+      });
+   }
 }
 
 
 function findRobotHandler(data, connection) {
    console.log(connection.name + " attempting to find robot for game: " + data.joinedGame);
+   connection.joinedGame = data.joinedGame;
+   
    var robot = null;
    for (var connectedRobot of Object.values(connectedRobots)) {
-      if (connectedRobot.joinedGame === data.joinedGame) {
+      // Need to ensure that the robot is not currently connected to a user.
+      console.log("Current peer connected to robot: " + connectedRobot.connectedPeer);
+      if (connectedRobot.connectedPeer == null && connectedRobot.joinedGame === data.joinedGame) {
          console.log("Robot found: " + connectedRobot.name);
          robot = connectedRobot;
          break;
@@ -192,7 +207,7 @@ function findRobotHandler(data, connection) {
 
    if (!robot) {
       // No robots are available, put user in queue.
-      console.log("No robots available, user joining queue for game: " + data.joinedGame);
+      console.log("No robots available, " + connection.name + " joining queue for game: " + data.joinedGame);
       joinQueue(data, connection);
    } else {
       // Request for offer from client.
@@ -233,6 +248,8 @@ function answerHandler(data, connection) {
 
       // Storing user name that robot is connected to
       connection.connectedPeer = data.name; 
+      console.log(data.name);
+      console.log(connection.connectedPeer);
       sendToConnection(targetUserConnection, { 
          type: "answer", 
          answer: data.answer 
@@ -245,43 +262,98 @@ function answerHandler(data, connection) {
 
 
 function leaveHandler(data, connection) {
-   var targetPeerConnection = null;
 
+   // Handle user leaving
    if (connectedUsers[connection.name]) {
       console.log("User left: " + connection.name + ", " + connection._socket.remoteAddress);
       
-      if (!data.leaveType) {
+      // Get robot that was connected to user that just left to inform robot of disconnect
+      if (connection.connectedPeer) {
+         var targetPeerConnection = connectedRobots[connection.connectedPeer];
+         // Need to send signal to close peer connection on connected peer if it exists
+         if (targetPeerConnection) { 
+            targetPeerConnection.connectedPeer = null;
+            console.log(connection.name + " disconnecting from ", targetPeerConnection.name);
+            sendToConnection(targetPeerConnection, { 
+               type: "leave",
+               name: connection.name
+            });
+         }
+      }
+         
+      // If user exists in a queue, delete the user from the queue.
+      if (userBattleQueue.get(connection.name) != null) {
+         userBattleQueue.delete(connection.name);
+      }
+         
+      // Get user next in queue
+      var minNode = userBattleQueue.min();
+      var nextUser;
+      if (minNode !== null) {
+         nextUser = connectedUsers[minNode.key];
+         console.log("Next user is " + nextUser.name);
+         // Remove user from queue, so that updated queue can be sent out to all other users
+         userBattleQueue.delete(nextUser.name);
+      }
+
+      var queueArray = [];
+      userBattleQueue.traverse(function(node) {
+         queueArray.push(node.key);
+      });
+      for (var val of Object.values(connectedUsers)) {
+         sendToConnection(val, {
+            type: "update-queue",
+            game: val.joinedGame,
+            updatedQueue: queueArray
+         });
+      }
+
+      if (nextUser) {
+         // Tell next user to try to start their turn
+         findRobotHandler({joinedGame: "battle"}, nextUser);
+         //sendToConnection(nextUser, {
+         //   type: "start-turn"
+         //});
+      }
+
+      // Finally delete user, as required by hard leave
+      if (!data.leaveType || data.leaveType === "kicked") {
          delete connectedUsers[connection.name];
       }
-      
       console.log("Total connected users: ", Object.keys(connectedUsers).length);
 
-      if (connection.connectedPeer) {
-         targetPeerConnection = connectedRobots[connection.connectedPeer];
-      }
+      
 
+
+   // Handle robot leaving
    } else if (connectedRobots[connection.name]) {
       console.log("Robot left: " + connection.name + ", " + connection._socket.remoteAddress);
+      
+      // Get user that was connected to robot that just left to inform user of disconnect.
+      if (connection.connectedPeer) {
+         var targetPeerConnection = connectedUsers[connection.connectedPeer];
+         // Need to send signal to close peer connection on connected peer if it exists
+         if (targetPeerConnection) { 
+            targetPeerConnection.connectedPeer = null;
+            console.log(connection.name + " disconnecting from ", targetPeerConnection.name);
+            sendToConnection(targetPeerConnection, { 
+               type: "leave",
+               name: connection.name
+            });
+         }
+      }
+      
       delete connectedRobots[connection.name];
       console.log("Total connected robots: ", Object.keys(connectedRobots).length);
-   
-      if (connection.connectedPeer) {
-         targetPeerConnection = connectedUsers[connection.connectedPeer];
-      }
+      
 
+
+
+   // Handle non-logged in user leaving
    } else {
       console.log("Unknown user @ " + connection._socket.remoteAddress + " has left");
       console.log("Total connected users: ", Object.keys(connectedUsers).length);
       console.log("Total connected robots: ", Object.keys(connectedRobots).length);
-   }
-   
-   // Need to send signal to close peer connection on connected peer if it exists
-   if (targetPeerConnection) { 
-      console.log(connection.name + " disconnecting from ", targetPeerConnection.name);
-      sendToConnection(targetPeerConnection, { 
-         type: "leave",
-         name: connection.name
-      });
    }
 }
 
