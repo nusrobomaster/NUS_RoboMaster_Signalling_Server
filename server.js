@@ -205,6 +205,7 @@ function joinQueue(data, connection) {
    for (var val of Object.values(connectedUsers)) {
       sendToConnection(val, {
          type: "update-queue",
+         instruction: "normal-update",
          game: val.joinedGame,
          updatedQueue: queueArray
       });
@@ -330,7 +331,7 @@ function leaveHandler(data, connection) {
    
    // Handle robot leaving
    } else if (connectedRobots[connection.name]) {
-      robotLeaveHandler(data, conneciton);      
+      robotLeaveHandler(data, connection);      
    
    // Handle non-logged in user leaving
    } else {
@@ -425,7 +426,13 @@ function userLeaveHandlerHelper(connection, gameQueue, isLeavingUserController) 
          
          if (nextUser != null) {
             // Tell next user to try to start their turn
-            findRobotHandler({joinedGame: "shooting"}, nextUser);
+            if (gameQueue === userBattleQueue) {
+               findRobotHandler({joinedGame: "battle"}, nextUser);
+            } else if (gameQueue === userShootingQueue) {
+               findRobotHandler({joinedGame: "shooting"}, nextUser);
+            } else {
+               console.error("Could not find a comparison for gameQueue!");
+            }
          }
       }
    }
