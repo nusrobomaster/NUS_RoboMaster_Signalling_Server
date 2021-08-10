@@ -53,6 +53,7 @@ stdin.addListener("data", function (d) {
 /* Data structures */
 var connectedUsers = {}; // Stores all users connected to server
 var connectedRobots = {};
+var connectedArenaCams = {};
 
 function timestampCompare(keyIn, keyAdd) {
    var timeIn = connectedUsers[keyIn].timestamp;
@@ -86,6 +87,10 @@ wss.on('connection', function (connection) {
 
          case "user-login":
             userLoginHandler(data, connection);
+            break;
+         
+         case "arena-cam-login":
+            arenaCamLoginHandler(data, connection);
             break;
 
          // Used by user initially to get available robots or to join a queue
@@ -175,6 +180,30 @@ function userLoginHandler(data, connection) {
    }
 
    console.log("Total connected users: ", Object.keys(connectedUsers).length);
+}
+
+function arenaCamLoginHandler(data, connection) {
+   if (connectedArenaCams[data.name]) {            // Check if arena cam exists already
+      console.warn("Arena Cam has already logged in: " + data.name);
+      sendToConnection(connection, {
+         type: "login",
+         success: false
+      });
+
+   } else {
+      // Save arena cam information on server
+      connection.name = data.name;              // arena cam name is initialized from script
+      // connection.joinedGame = data.joinedGame;  // An arena cam is initially assigned to a game
+      connectedArenaCams[data.name] = connection;  // Connection object for arena cam is stored
+      console.log("Arena Cam successfully logged in: " + connection.name +
+         ", for game: " + connection.joinedGame);
+      sendToConnection(connection, {
+         type: "login",
+         success: true
+      });
+   }
+
+   console.log("Total connected Arena Cams: ", Object.keys(connectedArenaCams).length);
 }
 
 
@@ -352,6 +381,7 @@ function userLeaveHandler(data, connection) {
 
    var isLeavingUserController = false;
    var gameQueue = null;
+   var freeRobot = null
 
    // Handle resetting the robot that a user was connected to
    if (connection.connectedPeer) {
@@ -366,6 +396,7 @@ function userLeaveHandler(data, connection) {
             name: connection.name
          });
       }
+      freeRobot = connection.connectedPeer; // Store value of free robot
       connection.connectedPeer = null; // Deregister robot for this user.
 
       // If we are inside this block, the user who left was currently the one controlling the robot
