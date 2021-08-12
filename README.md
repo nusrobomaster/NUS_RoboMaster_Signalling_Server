@@ -5,7 +5,7 @@ This server handles signalling for webRTC connection requests from a client on a
 ## Setup for Full Signalling Server
 
 - Install nodejs
-- Setup TURN server using [coTURN](https://github.com/coturn/coturn).
+- Setup TURN server using coTURN with the [following instructions](https://ourcodeworld.com/articles/read/1175/how-to-create-and-configure-your-own-stun-turn-server-with-coturn-in-ubuntu-18-04).
     - This is needed by webRTC to go through firewalls. Both the client frontend and robot need to know the IP:port for this server
 - Run the script using the `node server.js` command
 
