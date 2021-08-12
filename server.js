@@ -1,5 +1,8 @@
-var WebSocketServer = require('ws').Server;
-var SortedMap = require('dsjslib').AVLTree;
+import { WebSocketServer } from "ws";
+import { AVLTree as SortedMap } from "dsjslib";
+
+import Client from "./Client.js";
+import Robot from "./Robot.js";
 
 var wss = new WebSocketServer({ port: 49621 });
 
