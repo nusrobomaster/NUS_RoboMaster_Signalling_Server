@@ -153,6 +153,7 @@ function robotLoginHandler(data, connection) {
 }
 
 
+// This function is fine if a context switch happens in the middle of it.
 function userLoginHandler(data, connection) {
    if (connectedUsers[data.name]) {             // Check if user exists already
       console.warn("User attempted login with duplicate name: " + data.name);
@@ -188,6 +189,8 @@ function findRobotHandler(data, connection) {
       // Need to ensure that the robot is not currently connected to a user.
       console.log("Robot " + connectedRobot.name + " in game: " + connectedRobot.joinedGame +
          " | Availability: " + connectedRobot.connectedPeer);
+
+      // If robot in connectedRobots does not have a connectedPeer assigned to it.
       if (connectedRobot.connectedPeer == null && connectedRobot.joinedGame === connection.joinedGame) {
          console.log("Robot found: " + connectedRobot.name);
          robot = connectedRobot;
@@ -199,8 +202,11 @@ function findRobotHandler(data, connection) {
       // No robots are available, put user in queue.
       console.log("No robots available, " + connection.name + " joining queue for game: " + connection.joinedGame);
       joinQueue(data, connection);
-   } else {
+   } else { // 
       // Robot was found, so now we begin the signalling process between user and robot.
+
+      console.log("Requesting " + connection.name + " to send offer to robot: " + robot.name)
+
       sendToConnection(connection, {
          type: "request-offer",
          robotName: robot.name
@@ -246,10 +252,12 @@ function joinQueue(data, connection) {
 
 
 function offerHandler(data, connection) {
-   // Get robot connection object for user to send offer to
+   // Get robot connection object for user to send offer to. data.name here refers to the previously found robot
    var targetRobotConnection = connectedRobots[data.name];
 
    if (targetRobotConnection != null) {
+      // TODO So any other users can be requested to send an offer to this robot until an offer is received by a user. 
+      // This is because connectedPeer is not set until this point.
       connection.connectedPeer = data.name; // Storing robot name that user is connected to
       console.log(connection.name + " sending offer to robot: " + connection.connectedPeer);
 
@@ -260,6 +268,7 @@ function offerHandler(data, connection) {
       });
 
    } else {
+      // TODO In this event, send an error message to the user. With current implementation user will just time out. 
       console.error("Robot " + data.name + " is no longer connected to server.");
    }
 }
