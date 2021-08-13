@@ -1,10 +1,7 @@
 import { WebSocketServer } from "ws";
 import { AVLTree as SortedMap } from "dsjslib";
 
-import Client from "./Client.js";
-import Robot from "./Robot.js";
-
-var wss = new WebSocketServer({ port: 49621 });
+const wss = new WebSocketServer({ port: 49621 });
 
 // This opens a process that listens to console input. Helpful when debugging the server
 var stdin = process.openStdin();
@@ -207,7 +204,7 @@ function findRobotHandler(data, connection) {
       joinQueue(data, connection);
    } else { // 
       // Robot was found, so now we begin the signalling process between user and robot.
-
+      robot.connectedPeer = connection.name; // Storing user name that robot is connected to
       console.log("Requesting " + connection.name + " to send offer to robot: " + robot.name)
 
       sendToConnection(connection, {
