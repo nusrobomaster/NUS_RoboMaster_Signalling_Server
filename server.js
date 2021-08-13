@@ -180,12 +180,18 @@ function userLoginHandler(data, connection) {
 
 
 function findRobotHandler(data, connection) {
+   
    connection.joinedGame = data.joinedGame;
    console.log(connection.name + " attempting to find robot for game: " + connection.joinedGame);
 
    // Find if there are any available robots matching user's game request.
    var robot = null;
    for (var connectedRobot of Object.values(connectedRobots)) {
+      
+      if (connectedRobot.name === "arena-cam") {
+         continue;
+      }
+      
       // Need to ensure that the robot is not currently connected to a user.
       console.log("Robot " + connectedRobot.name + " in game: " + connectedRobot.joinedGame +
          " | Availability: " + connectedRobot.connectedPeer);
@@ -219,7 +225,7 @@ function joinQueue(data, connection) {
    // If this function is called, user should already have a joinedGame
    // attribute assigned.
    connection.timestamp = Date.now();
-   queueArray = [];
+   var queueArray = [];
 
    if (connection.joinedGame === "battle") {
       userBattleQueue.put(connection.name, connection.timestamp);
