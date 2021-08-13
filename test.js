@@ -1,7 +1,7 @@
 console.warn("test warning");
 console.error("test error");
 
-var collections = require('dsjslib');
+import { AVLTree as SortedMap } from "dsjslib";
 
 var myMap = {};
 
@@ -18,13 +18,19 @@ function test(keyIn, keyAdd) {
     }
 }
 
-var myTree = new collections.AVLTree(test);
+var myTree = new SortedMap(test);
 
-for (var i = 0; i < 10; i++) {
-    var randVal = Math.random();
-    myMap[randVal] = i;
-    myTree.put(randVal, i);
-}
+// for (var i = 0; i < 10; i++) {
+//     var randVal = Math.random();
+//     myMap[randVal] = i;
+//     myTree.put(randVal, i);
+// }
 
 console.log(myTree.min());
 console.log(myTree.max());
+
+if (myTree.min()) { 
+    console.log("hah");
+} else {
+    console.log("jshs");
+}
