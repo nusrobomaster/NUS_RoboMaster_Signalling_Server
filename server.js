@@ -1,54 +1,6 @@
 import { WebSocketServer } from "ws";
-import { AVLTree as SortedMap } from "dsjslib";
-
+import Queue from "./Queue.js";
 const wss = new WebSocketServer({ port: 49621 });
-
-// This opens a process that listens to console input. Helpful when debugging the server
-var stdin = process.openStdin();
-stdin.addListener("data", function (d) {
-   var input = d.toString().trim().split(/(?<=^\S+)\s/);
-
-   switch (input[0]) {
-      case "max":
-         console.log(userBattleQueue.max());
-         break;
-
-      case "min":
-         console.log(userBattleQueue.min());
-         break;
-
-      case "list":
-         if (input[1] === "users") {
-            console.log("Printing connected users:");
-            for (var user of Object.values(connectedUsers)) {
-               console.log("Name: " + user.name + " | Game: " + user.joinedGame +
-                  " | Robot: " + user.connectedPeer);
-            }
-         } else if (input[1] === "robots") {
-            console.log("Printing connected robots:");
-            for (var robot of Object.values(connectedRobots)) {
-               console.log("Name: " + robot.name + " | Game: " + robot.joinedGame +
-                  " | User: " + robot.connectedPeer);
-            }
-         } else {
-            console.log("Unknown list option");
-         }
-         break;
-
-      case "kick":
-         if (connectedUsers[input[1]]) {
-            leaveHandler({ leaveType: "kicked" }, connectedUsers[input[1]]);
-         } else {
-            console.log("No such user found.");
-         }
-         break;
-
-      default:
-         console.log("Unknown input");
-         break;
-   }
-});
-
 
 /* Data structures */
 var connectedUsers = {}; // Stores all users connected to server
@@ -66,8 +18,8 @@ function timestampCompare(keyIn, keyAdd) {
       return 1;
    }
 }
-var userBattleQueue = new SortedMap(timestampCompare);
-var userShootingQueue = new SortedMap(timestampCompare);
+var userBattleQueue = new Queue();
+var userShootingQueue = new Queue();
 /* Data structures */
 
 console.log("Signalling server started");
@@ -224,20 +176,15 @@ function findRobotHandler(data, connection) {
 function joinQueue(data, connection) {
    // If this function is called, user should already have a joinedGame
    // attribute assigned.
-   connection.timestamp = Date.now();
    var queueArray = [];
 
    if (connection.joinedGame === "battle") {
-      userBattleQueue.put(connection.name, connection.timestamp);
-      userBattleQueue.traverse(function (node) {
-         queueArray.push(node.key);
-      });
+      userBattleQueue.addNode(connection.name, connection);
+      queueArray = userBattleQueue.getJSON();
 
    } else if (connection.joinedGame === "shooting") {
-      userShootingQueue.put(connection.name, connection.timestamp);
-      userShootingQueue.traverse(function (node) {
-         queueArray.push(node.key);
-      });
+      userShootingQueue.addNode(connection.name, connection);
+      queueArray = userShootingQueue.getJSON();
 
    } else {
       console.error("User " + connection.name + " attempted to join unknown game: " +
@@ -246,6 +193,7 @@ function joinQueue(data, connection) {
    }
 
    // Once a user has joined a queue, issue a queue update to all connected users.
+
    for (var val of Object.values(connectedUsers)) {
       sendToConnection(val, {
          type: "update-queue",
@@ -317,21 +265,10 @@ function userStartGameHandler(data, connection) {
 
    // Delete user from appropriate game queue since they have started the game
    // This is assuming the user has been waiting in the queue previously.
-   if (gameQueue.get(connection.name) != null) {
-      gameQueue.delete(connection.name);
-   }
-   // If the user is literally the first person to join the queue, they will not be in the queue.
-   // So the error below will be normal.
-   else {
-      console.error("User " + connection.name + " no longer has a place in " +
-         connection.joinedGame + " queue!")
-   }
+   gameQueue.removeNode(connection.name);
+   var queueArray = gameQueue.getJSON();
 
    // Send queue update to all users NOW, since a user is confirmed to have started a game.
-   var queueArray = [];
-   gameQueue.traverse(function (node) {
-      queueArray.push(node.key);
-   });
    for (var val of Object.values(connectedUsers)) {
       sendToConnection(val, {
          type: "update-queue",
@@ -409,10 +346,7 @@ function userLeaveHandler(data, connection) {
       // Since the user who left is someone who is in the middle of the queue, we simply need
       // to remove the user (as we have done already by this point), and send the updated queue
       // to all users.
-      var queueArray = [];
-      gameQueue.traverse(function (node) {
-         queueArray.push(node.key);
-      });
+      var queueArray = gameQueue.getJSON();
       for (var val of Object.values(connectedUsers)) {
          sendToConnection(val, {
             type: "update-queue",
@@ -434,20 +368,18 @@ function userLeaveHandler(data, connection) {
 
 function userLeaveHandlerHelper(connection, gameQueue, isLeavingUserController) {
    // If user exists in queue, delete the user from the queue.
-   if (gameQueue.get(connection.name) != null) {
-      console.log(connection.name + " deleted from queue " + connection.joinedGame);
-      gameQueue.delete(connection.name);
-   }
+   gameQueue.removeNode(connection.name);
 
    if (isLeavingUserController) {
       // Get user next in queue
-      var minNode = gameQueue.min();
+      var minNode = gameQueue.frontNode;
+
       var nextUser = null;
-      if (minNode != null) { // minNode could be null if there are no users left in queue
-         nextUser = connectedUsers[minNode.key]; // Get nextUser connection object.
+      if (minNode !== null) { // minNode could be null if there are no users left in queue
+         nextUser = minNode.nodeValue; // Get nextUser connection object.
          console.log("Next user for game " + nextUser.joinedGame + " is " + nextUser.name);
 
-         if (nextUser != null) {
+         if (nextUser !== null) {
             // Tell next user to try to start their turn
             if (gameQueue === userBattleQueue) {
                findRobotHandler({ joinedGame: "battle" }, nextUser);
